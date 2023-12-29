@@ -1,6 +1,6 @@
 # main.py
 
-from network_scanner import scan_network, get_mac_details, scan_ports, detect_os_active, detect_os_passive, infer_device_type, scan_vulnerabilities
+from network_scanner import scan_network, get_mac_details, scan_ports, detect_os_active, detect_os_passive, infer_device_type, scan_vulnerabilities, analyze_ports
 from traffic_analyzer import start_traffic_analysis, device_traffic
 import threading
 
@@ -13,25 +13,18 @@ def main():
     # traffic_thread.start()
 
     # Perform network scanning
-    network_range = ""
+    network_range = "192.168.1.0/24"
     devices = scan_network(network_range)
-
-    # for device in devices:
-    #     ip = device['ip']
-    #     mac = device['mac']
-    #     manufacturer = get_mac_details(mac)
-    #     print(f"IP: {ip}, MAC: {mac}, Manufacturer: {manufacturer}")
-
-    #     banners = scan_ports(ip)
-    #     for port, banner in banners.items():
-    #         print(f"Port: {port}, Banner: {banner}")
-
 
     for device in devices:
         ip = device['ip']
         mac = device['mac']
         manufacturer = get_mac_details(mac)
         open_ports = scan_ports(ip)
+        open_ports = analyze_ports(ip, open_ports)
+        if "Error" in open_ports:
+            print(f"Error scanning {ip}: {open_ports['Error']}")
+            continue
         os_guess = detect_os_active(ip)
         if os_guess.startswith("Unknown OS"):
             # If active detection fails, try passive detection
