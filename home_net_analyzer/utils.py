@@ -1,15 +1,9 @@
-# network_scanner.py
-
-import socket
-import nmap
+# utils.py
 import requests
-from scapy.all import ARP, Ether, srp
-import http.client
-import ssl
+import nmap
 import ftplib
 import smtplib
-
-from constants import EXTENDED_COMMON_SERVICES, KNOWN_ROUTER_OUIS
+from .constants import KNOWN_ROUTER_OUIS
 
 
 def get_mac_details(mac_address):
@@ -19,94 +13,6 @@ def get_mac_details(mac_address):
     if response.status_code != 200:
         return 'Unknown Manufacturer'
     return response.content.decode()
-
-
-def scan_network(ip_range):
-    # ARP scan to detect devices
-    packet = Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=ip_range)
-    result = srp(packet, timeout=3, verbose=0)[0]
-
-    devices = []
-    for sent, received in result:
-        devices.append({'ip': received.psrc, 'mac': received.hwsrc})
-    return devices
-
-
-def analyze_ports(ip_address, open_ports):
-    banners = {}
-    for port in open_ports:
-        service = EXTENDED_COMMON_SERVICES.get(port, "Unknown")
-
-        # Use specialized banner grabbing
-        if service in ["HTTP", "HTTPS"]:
-            banner = grab_banner_http_https(ip_address, port, service)
-        else:
-            banner = grab_banner(ip_address, port)
-
-        banners[port] = {"service": service, "banner": banner if banner else "No Banner"}
-    return banners
-
-
-def scan_ports(ip_address):
-    nm = nmap.PortScanner()
-    try:
-        nm.scan(ip_address, '1-1024')
-        open_ports = [port for port in nm[ip_address]['tcp'].keys() if 'tcp' in nm[ip_address]]
-        return open_ports
-    except Exception as e:
-        return {"Error": f"Failed to scan ports: {str(e)}"}
-
-
-def grab_banner(ip_address, port):
-    try:
-        socket.setdefaulttimeout(2)
-        s = socket.socket()
-        s.connect((ip_address, port))
-        banner = s.recv(1024).decode().strip()
-        s.close()
-        return banner
-    except:
-        return None
-
-
-def grab_banner_http_https(ip_address, port, service):
-    try:
-        url = f"http://{ip_address}:{port}" if service == "HTTP" else f"https://{ip_address}:{port}"
-        context = None if service == "HTTP" else ssl._create_unverified_context()
-        conn = http.client.HTTPSConnection(ip_address, port, context=context, timeout=10) if service == "HTTPS" \
-            else http.client.HTTPConnection(ip_address, port, timeout=10)
-        conn.request("GET", "/")
-        response = conn.getresponse()
-        return f"{response.status} {response.reason}"
-    except Exception as e:
-        return f"Failed to retrieve banner: {str(e)}"
-
-
-def detect_os_active(ip_address):
-    nm = nmap.PortScanner()
-    try:
-        nm.scan(ip_address, arguments="-A")  # Using -O for OS detection
-        if 'osclass' in nm[ip_address]:
-            for osclass in nm[ip_address]['osclass']:
-                return osclass.get('osfamily', 'Unknown') + " " + osclass.get('osgen', '')
-        return "Unknown OS"
-    except Exception as e:
-        return f"OS detection failed: {str(e)}"
-
-
-def detect_os_passive(ip_address):
-    try:
-        with open('/tmp/p0f.log', 'r') as file:
-            for line in file:
-                if ip_address in line and "os=" in line:
-                    parts = line.split('os=')
-                    if len(parts) > 1:
-                        os_info = parts[1].split('|')[0]
-                        return os_info.strip()
-        return "Unknown OS (p0f)"
-    except Exception as e:
-        return f"p0f OS detection failed: {str(e)}"
-
 
 def infer_device_type(mac_address, open_ports):
     oui = mac_address.replace(":", "")[:6].upper()
@@ -150,6 +56,10 @@ def infer_device_type(mac_address, open_ports):
         return "Multi-Service Device"
 
     return "Unknown Device"
+
+
+# Vulnerability scan utils
+
 
 def scan_vulnerabilities(ip_address, open_ports):
     vulnerabilities = {}
@@ -256,15 +166,3 @@ def check_smtp_vulnerability(ip_address):
         return [f"Error checking SMTP vulnerability: {str(e)}"]
 
     return vulnerabilities if vulnerabilities else ["No known SMTP vulnerabilities detected"]
-
-def get_p0f_os_info(ip_address):
-    try:
-        with open('/tmp/p0f.log', 'r') as file:
-            for line in file:
-                if ip_address in line:
-                    # Extract OS information from the log line
-                    # This is a simplified example, actual extraction depends on p0f log format
-                    return line.split('os=')[1].split(' ')[0]
-        return "Unknown OS (p0f)"
-    except Exception as e:
-        return f"p0f OS detection failed: {str(e)}"

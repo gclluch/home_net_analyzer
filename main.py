@@ -1,55 +1,61 @@
 # main.py
 
-from network_scanner import scan_network, get_mac_details, scan_ports, detect_os_active, detect_os_passive, infer_device_type, scan_vulnerabilities, analyze_ports
-from traffic_analyzer import start_traffic_analysis, device_traffic
+from home_net_analyzer.scanner import scan_network
+from home_net_analyzer.utils import get_mac_details, infer_device_type
+from home_net_analyzer.port_scanner import scan_ports, analyze_ports
+from home_net_analyzer.os_detector import detect_os_active, detect_os_passive
+from home_net_analyzer.vulnerability import scan_vulnerabilities
+from home_net_analyzer.traffic_analyzer import start_traffic_analysis, device_traffic
 import threading
 
 
 def main():
-    analysis_duration = 14400  #
+    analysis_duration = 14400
 
     # Start traffic analysis in a separate thread
+    # Uncomment the following lines if traffic analysis is implemented and needed
     # traffic_thread = threading.Thread(target=start_traffic_analysis, args=(analysis_duration,))
     # traffic_thread.start()
 
     # Perform network scanning
     network_range = "192.168.1.0/24"
     devices = scan_network(network_range)
-
+    # print("DEVICES: ", devices)
+    # devices = [
+    #     {'ip': '192.168.1.84', 'mac': '56:a2:e2:f1:82:60'}, {'ip': '192.168.1.121', 'mac': '38:42:0b:6a:fb:bc'}
+    # ]
     for device in devices:
+
         ip = device['ip']
         mac = device['mac']
         manufacturer = get_mac_details(mac)
         open_ports = scan_ports(ip)
-        open_ports = analyze_ports(ip, open_ports)
-        if "Error" in open_ports:
+        if isinstance(open_ports, dict) and "Error" in open_ports:
             print(f"Error scanning {ip}: {open_ports['Error']}")
             continue
+
+        port_details = analyze_ports(ip, open_ports)
+        if "Error" in port_details:
+            print(f"Error scanning {ip}: {port_details['Error']}")
+            continue
+
         os_guess = detect_os_active(ip)
         if os_guess.startswith("Unknown OS"):
-            # If active detection fails, try passive detection
             os_guess = detect_os_passive(ip)
-        device_type = infer_device_type(mac, open_ports.keys())
-        vulnerabilities = scan_vulnerabilities(ip, open_ports.keys())
-
-
-        if "Error" in open_ports:
-            print(f"Error scanning {ip}: {open_ports['Error']}")
-            continue
+        device_type = infer_device_type(mac, port_details.keys())
+        vulnerabilities = scan_vulnerabilities(ip, port_details.keys())
 
         print(f"IP: {ip}, MAC: {mac}, Manufacturer: {manufacturer}, OS: {os_guess}, Device Type: {device_type}")
-        for port, info in open_ports.items():
+        for port, info in port_details.items():
             print(f"Port: {port}, Service: {info['service']}, Banner: {info['banner']}")
         for port, vuln in vulnerabilities.items():
             print(f"Port: {port}, Vulnerability: {vuln}")
 
         print()
 
-
     # Optionally, you can stop the traffic analysis after a certain duration
-
+    # Uncomment the following lines if traffic analysis is implemented and needed
     # traffic_thread.join()
-    # # Display traffic analysis data
     # for ip, data in device_traffic.items():
     #     data_regular_dict = {
     #       'total_packets': data['total_packets'],
@@ -57,7 +63,6 @@ def main():
     #       'data_volume': data['data_volume'],
     #       'activity_periods': dict(data['activity_periods'])
     #     }
-
     #     print(f"IP: {ip}, Data: {data_regular_dict}")
 
 
