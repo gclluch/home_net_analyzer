@@ -1,25 +1,15 @@
-import socket
 import http.client
+import dns.resolver
 import ssl
 import ftplib
 import smtplib
 import paramiko
+import paho.mqtt.client as mqtt
+
 
 # Only disable on secure, internal networks
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-
-def grab_banner(ip_address, port):
-    try:
-        socket.setdefaulttimeout(2)
-        s = socket.socket()
-        s.connect((ip_address, port))
-        banner = s.recv(1024).decode().strip()
-        s.close()
-        return banner
-    except:
-        return None
 
 
 def grab_banner_http(ip_address, port):
@@ -73,3 +63,29 @@ def grab_banner_smtp(ip_address, port):
             return str(banner)
     except Exception as e:
         return f"Failed to retrieve SMTP banner: {str(e)}"
+
+
+def probe_dns_server(ip_address, port):
+    try:
+        resolver = dns.resolver.Resolver()
+        resolver.nameservers = [ip_address]
+        answers = resolver.query('example.com', 'A')
+        if answers:
+            return "DNS service is responsive."
+    except Exception as e:
+        return f"Failed to probe DNS service: {str(e)}"
+
+
+def probe_mqtt_broker(ip_address, port):
+    try:
+        client = mqtt.Client()
+        client.connect(ip_address, port, 60)
+        client.disconnect()
+        return "MQTT broker responsive."
+    except Exception as e:
+        return f"Failed to probe MQTT broker: {str(e)}"
+
+
+def grab_printer_banner(ip_address, port):
+    # Use HTTP banner grabbing for IPP
+    return grab_banner_http(ip_address, port)
