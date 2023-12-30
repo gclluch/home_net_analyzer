@@ -29,18 +29,14 @@ def main():
     network_range = "192.168.1.0/24"
     devices = scan_network(network_range)
     # print("DEVICES: ", devices)
-    # devices = [
-    #     {'ip': '192.168.1.100', 'mac': 'e0:d8:c4:a3:67:6e'},
-    #     {'ip': '192.168.1.40', 'mac': '78:a0:3f:5f:25:d1'},
-    #     {'ip': '192.168.1.121', 'mac': '38:42:0b:6a:fb:bc'}
-    # ]
+
     for device in devices:
 
         ip = device['ip']
         mac = device['mac']
         manufacturer = get_mac_details(mac)
         open_ports = scan_ports(ip)
-        print(open_ports)
+        # print(open_ports)
         if isinstance(open_ports, dict) and "Error" in open_ports:
             print(f"Error scanning {ip}: {open_ports['Error']}")
             continue
@@ -56,13 +52,32 @@ def main():
         device_type = infer_device_type(mac, port_details.keys())
         vulnerabilities = scan_vulnerabilities(ip, port_details.keys())
 
-        print(f"IP: {ip}, MAC: {mac}, Manufacturer: {manufacturer}, OS: {os_guess}, Device Type: {device_type}")
-        for port, info in port_details.items():
-            print(f"Port: {port}, Service: {info['service']}, Banner: {info['banner']}")
-        for port, vuln in vulnerabilities.items():
-            print(f"Port: {port}, Vulnerability: {vuln}")
+        # print(f"IP: {ip}, MAC: {mac}, Manufacturer: {manufacturer}, OS: {os_guess}, Device Type: {device_type}")
+        # for port, info in port_details.items():
+        #     print(f"Port: {port}, Service: {info['service']}, Banner: {info['banner']}")
+        # for port, vuln in vulnerabilities.items():
+        #     print(f"Port: {port}, Vulnerability: {vuln}")
+        # print()
 
-        print()
+
+        print("\n" + "="*50)
+        print(f"Device Information for IP: {ip}")
+        print("="*50)
+        print(f"  MAC Address: {mac}")
+        print(f"  Manufacturer: {manufacturer}")
+        print(f"  OS (Guess): {os_guess}")
+        print(f"  Device Type: {device_type}")
+        print("\n  Open Ports and Services:")
+        for port, info in port_details.items():
+            print(f"    Port: {port}")
+            print(f"      Service: {info['service']}")
+            print(f"      Banner: {info['banner']}")
+        print("\n  Identified Vulnerabilities:")
+        for port, vuln in vulnerabilities.items():
+            print(f"    Port: {port}, Vulnerabilities:")
+            for v in vuln:  # Assuming vuln is a list of vulnerabilities
+                print(f"      - {v}")
+        print("="*50 + "\n")
 
     # Optionally, you can stop the traffic analysis after a certain duration
     # Uncomment the following lines if traffic analysis is implemented and needed
