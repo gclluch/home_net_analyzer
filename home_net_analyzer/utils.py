@@ -3,8 +3,13 @@ import requests
 import nmap
 import ftplib
 import smtplib
+import dns.resolver
+import dns.exception
+from smb.SMBConnection import SMBConnection
+import logging
 from .constants import KNOWN_ROUTER_OUIS
 
+##### Device Detail Utils #####
 
 def get_mac_details(mac_address):
     # Query an online API for MAC address details
@@ -58,23 +63,7 @@ def infer_device_type(mac_address, open_ports):
     return "Unknown Device"
 
 
-# Vulnerability scan utils
-
-
-def scan_vulnerabilities(ip_address, open_ports):
-    vulnerabilities = {}
-    for port in open_ports:
-        if port == 22:  # SSH
-            vulnerabilities[port] = check_ssh_vulnerability(ip_address)
-        elif port in [80, 443]:  # HTTP/HTTPS
-            vulnerabilities[port] = check_http_vulnerability(ip_address, port)
-        elif port == 21:  # FTP
-            vulnerabilities[port] = check_ftp_vulnerability(ip_address)
-        elif port == 25 or port == 587:  # SMTP
-            vulnerabilities[port] = check_smtp_vulnerability(ip_address)
-        # ... more checks for other ports ...
-
-    return vulnerabilities
+##### Vulnerability Scan Utils #####
 
 
 def check_ssh_vulnerability(ip_address):
@@ -101,7 +90,7 @@ def check_ssh_vulnerability(ip_address):
                         vulnerabilities.append("DSA key length not 1024 bits")
                     # Add more logic for other key types and known issues
 
-        return vulnerabilities if vulnerabilities else "No known SSH vulnerabilities detected"
+        return vulnerabilities if vulnerabilities else ["No known SSH vulnerabilities detected"]
     except Exception as e:
         return f"Error checking SSH vulnerability: {str(e)}"
 
@@ -120,7 +109,29 @@ def check_http_vulnerability(ip_address, port):
             vulnerabilities.append("Potential vulnerability in nginx 1.16")
         # ... additional checks based on server response ...
 
-        return vulnerabilities if vulnerabilities else "No known HTTP vulnerabilities detected"
+        # Check for insecure HTTP methods (e.g., TRACE, PUT)
+        if 'Allow' in response.headers:
+            if 'TRACE' in response.headers['Allow']:
+                vulnerabilities.append("HTTP TRACE method enabled")
+            if 'PUT' in response.headers['Allow']:
+                vulnerabilities.append("HTTP PUT method enabled")
+
+        # Check for security-related headers
+        if 'X-Powered-By' in response.headers:
+            vulnerabilities.append(f"Server exposes software versions via X-Powered-By header: {response.headers['X-Powered-By']}")
+        if 'Server' in response.headers:
+            vulnerabilities.append(f"Server exposes software versions via Server header: {response.headers['Server']}")
+
+        # Check for default pages indicating unconfigured server
+        common_pages = ['index.html', 'index.php', '/phpinfo.php', '/server-status']
+        for page in common_pages:
+            resp = requests.get(f"{url}/{page}", timeout=10, verify=False)
+            if resp.status_code == 200 and 'phpinfo()' in resp.text:
+                vulnerabilities.append(f"Exposed phpinfo() at {page}")
+            if resp.status_code == 200 and 'Apache Status' in resp.text:
+                vulnerabilities.append(f"Apache server status exposed at {page}")
+
+        return vulnerabilities if vulnerabilities else ["No known HTTP vulnerabilities detected"]
     except requests.ConnectionError:
         return ["Connection error (Is the server up?)"]
     except requests.Timeout:
@@ -155,9 +166,9 @@ def check_smtp_vulnerability(ip_address):
                 vulnerabilities.append("SMTP server accessible")
 
             # Check for open relay
-            status, _ = smtp.docmd("MAIL FROM:<test@example.com>")
+            status, _ = smtp.docmd("MAIL FROM:john@cena.com")
             if "250" in status:
-                status, _ = smtp.docmd("RCPT TO:<test@example.com>")
+                status, _ = smtp.docmd("RCPT TO:john@cena.com")
                 if "250" in status:
                     vulnerabilities.append("Potential open relay detected")
 
@@ -166,3 +177,76 @@ def check_smtp_vulnerability(ip_address):
         return [f"Error checking SMTP vulnerability: {str(e)}"]
 
     return vulnerabilities if vulnerabilities else ["No known SMTP vulnerabilities detected"]
+
+
+def check_dns_vulnerability(ip_address):
+    vulnerabilities = []
+    test_domain = "example.com"  # A domain known to have a substantial DNS record
+
+    try:
+        resolver = dns.resolver.Resolver()
+        resolver.nameservers = [ip_address]
+        answers = resolver.query(test_domain, 'ANY')
+        if answers and len(answers) > 1:
+            vulnerabilities.append("DNS server is potentially vulnerable to amplification attacks.")
+    except dns.exception.DNSException as e:
+        if "metaqueries are not allowed" in str(e):
+            vulnerabilities.append("DNS server properly configured to disallow metaqueries.")
+        else:
+            vulnerabilities.append(f"Error checking DNS vulnerability: {e}")
+
+    return vulnerabilities if vulnerabilities else ["No known DNS vulnerabilities detected"]
+
+
+def check_file_sharing_vulnerability(ip_address, port):
+    vulnerabilities = []
+
+    # Check for SMBv1 usage (deprecated and insecure)
+    try:
+        conn_v1 = SMBConnection('', '', 'temp', ip_address, use_ntlm_v2=False)
+        if conn_v1.connect(ip_address, port, timeout=10):
+            vulnerabilities.append(f"SMBv1 protocol is enabled on port {port}, which is outdated and insecure.")
+    except Exception as e:
+        return [f"Error checking SMBv1 vulnerability: {str(e)}"]
+
+    # Check for misconfigured shares
+    try:
+        conn = SMBConnection('', '', 'temp', ip_address)
+        if conn.connect(ip_address, port, timeout=10):
+            shares = conn.listShares(timeout=10)
+            for share in shares:
+                if share.isSpecial and not share.name.endswith('$'):  # Non-administrative shares
+                    vulnerabilities.append(f"Potentially misconfigured share on port {port}: {share.name}")
+    except Exception as e:
+        return [f"Error checking share vulnerability: {str(e)}"]
+
+    return vulnerabilities if vulnerabilities else ["No known SMB vulnerabilities detected"]
+
+
+def check_webapp_vulnerability(ip_address, port):
+    vulnerabilities = []
+    urls_to_test = ['http://{0}:{1}/phpmyadmin/', 'http://{0}:{1}/wordpress/']
+
+    for url in urls_to_test:
+        try:
+            response = requests.get(url.format(ip_address, port), timeout=5)
+            if response.status_code == 200:
+                vulnerabilities.append(f"Web application found at {url.format(ip_address, port)}")
+        except requests.RequestException as e:
+            return [f"Error checking webapp vulnerability: {str(e)}"]
+
+        try:
+            response = requests.get(url + "'")  # Appending a single quote to test for SQL Injection
+            if "SQL syntax" in response.text or "database error" in response.text:
+                vulnerabilities.append(f"Potential SQL Injection vulnerability found at {url}")
+        except requests.RequestException:
+            return [f"Error checking SQL injection vulnerability: {str(e)}"]
+
+    return vulnerabilities if vulnerabilities else ["No known web app vulnerabilities detected"]
+
+
+# TODO
+# def check_database_vulnerability(ip_address, port):
+#     vulnerabilities = []
+#     # Logic to check for database-specific vulnerabilities
+#     return vulnerabilities

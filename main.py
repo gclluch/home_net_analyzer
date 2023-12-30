@@ -7,6 +7,14 @@ from home_net_analyzer.os_detector import detect_os_active, detect_os_passive
 from home_net_analyzer.vulnerability import scan_vulnerabilities
 from home_net_analyzer.traffic_analyzer import start_traffic_analysis, device_traffic
 import threading
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    filename='app.log',
+    filemode='w'
+    )
 
 
 def main():
@@ -22,7 +30,9 @@ def main():
     devices = scan_network(network_range)
     # print("DEVICES: ", devices)
     # devices = [
-    #     {'ip': '192.168.1.84', 'mac': '56:a2:e2:f1:82:60'}, {'ip': '192.168.1.121', 'mac': '38:42:0b:6a:fb:bc'}
+    #     {'ip': '192.168.1.100', 'mac': 'e0:d8:c4:a3:67:6e'},
+    #     {'ip': '192.168.1.40', 'mac': '78:a0:3f:5f:25:d1'},
+    #     {'ip': '192.168.1.121', 'mac': '38:42:0b:6a:fb:bc'}
     # ]
     for device in devices:
 
@@ -30,6 +40,7 @@ def main():
         mac = device['mac']
         manufacturer = get_mac_details(mac)
         open_ports = scan_ports(ip)
+        print(open_ports)
         if isinstance(open_ports, dict) and "Error" in open_ports:
             print(f"Error scanning {ip}: {open_ports['Error']}")
             continue
