@@ -11,10 +11,32 @@ def scan_ports(ip_address):
 
         nm.scan(
             ip_address,
-            '1-2048',  # 1-1024, 1-65535
+            '1-10000',  # 1-1024, 1-65535
             # arguments='-sV'  # -sV for service version detection
         )
         return [port for port in nm[ip_address].get('tcp', [])]
+    except Exception as e:
+        return {"Error": f"Failed to scan ports: {str(e)}"}
+
+
+def scan_ports(ip_address):
+    nm = nmap.PortScanner()
+    try:
+        # Include the -sV option for service version detection
+        nm.scan(ip_address, '1-10000', arguments='-sV')
+
+        port_info = {}
+        for port in nm[ip_address]['tcp']:
+            service_info = nm[ip_address]['tcp'][port]
+            service = service_info['name']
+            version = service_info['version']
+            product = service_info['product']
+            extra_info = service_info['extrainfo']
+
+            banner = f"{service}, {product} {version} {extra_info}".strip()
+            port_info[port] = {"service": service, "banner": banner}
+
+        return port_info
     except Exception as e:
         return {"Error": f"Failed to scan ports: {str(e)}"}
 

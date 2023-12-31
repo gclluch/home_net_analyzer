@@ -225,7 +225,25 @@ def check_file_sharing_vulnerability(ip_address, port):
 
 def check_webapp_vulnerability(ip_address, port):
     vulnerabilities = []
-    urls_to_test = ['http://{0}:{1}/phpmyadmin/', 'http://{0}:{1}/wordpress/']
+    urls_to_test = [
+        f"http://{ip_address}:{port}/phpmyadmin/",
+        f"http://{ip_address}:{port}/wordpress/",
+        f"http://{ip_address}:{port}/admin/",
+        f"http://{ip_address}:{port}/login/",
+        f"http://{ip_address}:{port}/wp-login.php",
+        f"http://{ip_address}:{port}/administrator/",
+        f"http://{ip_address}:{port}/user/login/",
+        f"http://{ip_address}:{port}/joomla/",
+        f"http://{ip_address}:{port}/mysqladmin/",
+        f"http://{ip_address}:{port}/db/",
+        f"http://{ip_address}:{port}/dbadmin/",
+        f"http://{ip_address}:{port}/myadmin/",
+        f"http://{ip_address}:{port}/mysql/",
+        f"http://{ip_address}:{port}/phpMyAdmin/",
+        f"http://{ip_address}:{port}/pma/",
+        f"http://{ip_address}:{port}/admin.php",
+        f"http://{ip_address}:{port}/config/",
+    ]
 
     for url in urls_to_test:
         try:
@@ -233,14 +251,18 @@ def check_webapp_vulnerability(ip_address, port):
             if response.status_code == 200:
                 vulnerabilities.append(f"Web application found at {url.format(ip_address, port)}")
         except requests.RequestException as e:
-            return [f"Error checking webapp vulnerability: {str(e)}"]
+            # return [f"Error checking webapp vulnerability: {str(e)}"]
+            pass
 
         try:
             response = requests.get(url + "'")  # Appending a single quote to test for SQL Injection
-            if "SQL syntax" in response.text or "database error" in response.text:
+
+            known_error_indicators = ["SQL syntax", "database error", "mysql_fetch_array", "SQLSTATE", "ODBC SQL Server Driver"]
+            if any(error_indicator in response.text for error_indicator in known_error_indicators):
                 vulnerabilities.append(f"Potential SQL Injection vulnerability found at {url}")
-        except requests.RequestException:
-            return [f"Error checking SQL injection vulnerability: {str(e)}"]
+        except requests.RequestException as e:
+            pass
+            # return [f"Error checking SQL injection vulnerability: {str(e)}"]
 
     return vulnerabilities if vulnerabilities else ["No known web app vulnerabilities detected"]
 
