@@ -1,25 +1,11 @@
 # port_scanner.py
 import socket
 import nmap
-from .constants import EXTENDED_COMMON_SERVICES
-from .banner_utils import *
+from home_net_analyzer.constants import EXTENDED_COMMON_SERVICES
+from home_net_analyzer.banner_utils import *
 
 
 def scan_ports(ip_address):
-    nm = nmap.PortScanner()
-    try:
-
-        nm.scan(
-            ip_address,
-            '1-10000',  # 1-1024, 1-65535
-            # arguments='-sV'  # -sV for service version detection
-        )
-        return [port for port in nm[ip_address].get('tcp', [])]
-    except Exception as e:
-        return {"Error": f"Failed to scan ports: {str(e)}"}
-
-
-def scan_ports_2(ip_address):
     nm = nmap.PortScanner()
     try:
         # Include the -sV option for service version detection
@@ -37,7 +23,6 @@ def scan_ports_2(ip_address):
             product = service_info['product']
             extra_info = service_info['extrainfo']
 
-            banner = f"{service}, {product} {version}, {extra_info}".strip()
             port_info[port] = {
                 "service": service,
                 "product": product,

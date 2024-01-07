@@ -12,12 +12,35 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
+def analyze_http_headers(headers):
+    security_headers = {
+        'Strict-Transport-Security': 'HSTS not implemented.',
+        'Content-Security-Policy': 'CSP not implemented.',
+        'X-Frame-Options': 'Clickjacking protection missing.',
+        # More headers can be added here
+    }
+    findings = []
+    for header, warning in security_headers.items():
+        if header not in headers:
+            findings.append(warning)
+    return findings
+
+
 def grab_banner_http(ip_address, port):
     try:
+        headers = {'User-Agent': 'Mozilla/5.0 (Banner Grabber)'}
         conn = http.client.HTTPConnection(ip_address, port, timeout=10)
-        conn.request("GET", "/")
+        conn.request("GET", "/", headers=headers)
         response = conn.getresponse()
-        return f"{response.status} {response.reason}"
+        response_headers = response.getheaders()
+
+        # Analyze security headers
+        security_findings = analyze_http_headers(dict(response_headers))
+
+        banner_info = f"{response.status} {response.reason}"
+        if security_findings:
+            banner_info += " | Security Issues: " + ", ".join(security_findings)
+        return banner_info
     except Exception as e:
         return f"Failed to retrieve banner: {str(e)}"
 

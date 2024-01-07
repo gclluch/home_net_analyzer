@@ -28,7 +28,11 @@ def infer_device_type(mac_address, open_ports):
 
     # Enhanced heuristics based on open ports
     if {80, 443}.issubset(open_ports):
+        if 22 in open_ports:
+            return "Managed Web Server"
         return "Web Server"
+    if {21, 22, 80, 443}.issubset(open_ports):
+        return "Web Hosting Server"
     if 22 in open_ports:
         return "SSH Server"
     if 21 in open_ports:
@@ -51,13 +55,24 @@ def infer_device_type(mac_address, open_ports):
         return "SNMP Device"
     if 3389 in open_ports:
         return "Remote Desktop Service"
-
-    # Additional logic for IoT and smart devices
     if {1883, 8883}.issubset(open_ports):
         return "MQTT Device (IoT)"
     if 5683 in open_ports:
         return "CoAP Device (IoT)"
-
+    if 9100 in open_ports:
+        return "Network Printer"
+    if 3478 in open_ports or 5349 in open_ports:
+        return "STUN/TURN Service"
+    if 1935 in open_ports or 5080 in open_ports:
+        return "Streaming Server"
+    if any(port in range(6881, 6890) for port in open_ports):
+        return "Torrent Server"
+    if 53 in open_ports:
+        return "DNS Server"
+    if {67, 68}.issubset(open_ports):
+        return "DHCP Server"
+    if 554 in open_ports or 8554 in open_ports:
+        return "Surveillance Camera"
     # Device type based on combination of ports
     if {80, 443, 22}.issubset(open_ports):
         return "Multi-Service Device"
@@ -102,57 +117,88 @@ def check_ssh_vulnerability(ip_address):
         return f"Error checking SSH vulnerability: {str(e)}"
 
 
+def check_security_headers(response_headers):
+    findings = []
+    expected_headers = {
+        'Strict-Transport-Security': 'HSTS not implemented.',
+        'Content-Security-Policy': 'CSP not implemented.',
+        'X-Frame-Options': 'Clickjacking protection missing.',
+        'X-Content-Type-Options': 'MIME type sniffing protection missing.',
+        'X-XSS-Protection': 'XSS protection not enabled.',
+    }
+
+    missing_headers = expected_headers.keys() - response_headers.keys()
+    for header in missing_headers:
+        findings.append(expected_headers[header])
+
+    return findings
+
+
 def check_http_vulnerability(ip_address, port):
     try:
         url = f"http://{ip_address}:{port}" if port == 80 else f"https://{ip_address}:{port}"
         response = requests.get(url, timeout=10, verify=False)
-        server_header = response.headers.get('Server', '')
-        vulnerabilities = []
 
-        # Check for known vulnerabilities based on server header
-        if "Apache/2.2" in server_header:
-            vulnerabilities.append("Potential vulnerability in Apache 2.2")
-        elif "nginx/1.16" in server_header:
-            vulnerabilities.append("Potential vulnerability in nginx 1.16")
-        # ... additional checks based on server response ...
-
-        # Check for insecure HTTP methods (e.g., TRACE, PUT)
-        if 'Allow' in response.headers:
-            if 'TRACE' in response.headers['Allow']:
-                vulnerabilities.append("HTTP TRACE method enabled")
-            if 'PUT' in response.headers['Allow']:
-                vulnerabilities.append("HTTP PUT method enabled")
-
-        # Check for security-related headers
-        if 'X-Powered-By' in response.headers:
-            vulnerabilities.append(
-                f"Server exposes software versions via X-Powered-By header: {response.headers['X-Powered-By']}")
-        if 'Server' in response.headers:
-            vulnerabilities.append(
-                f"Server exposes software versions via Server header: {response.headers['Server']}")
+        vulnerabilities = check_response_for_vulnerabilities(response)
 
         # Check for default pages indicating unconfigured server
-        common_pages = [
-            'index.html',
-            'index.php',
-            '/phpinfo.php',
-            '/server-status']
-        for page in common_pages:
-            resp = requests.get(f"{url}/{page}", timeout=10, verify=False)
-            if resp.status_code == 200 and 'phpinfo()' in resp.text:
-                vulnerabilities.append(f"Exposed phpinfo() at {page}")
-            if resp.status_code == 200 and 'Apache Status' in resp.text:
-                vulnerabilities.append(
-                    f"Apache server status exposed at {page}")
+        vulnerabilities += check_for_default_pages(url)
 
-        return vulnerabilities if vulnerabilities else [
-            "No known HTTP vulnerabilities detected"]
+        return vulnerabilities if vulnerabilities else ["No known HTTP vulnerabilities detected"]
     except requests.ConnectionError:
         return ["Connection error (Is the server up?)"]
     except requests.Timeout:
         return ["Request timed out"]
     except requests.RequestException as e:
         return [f"HTTP check failed: {str(e)}"]
+
+
+def check_response_for_vulnerabilities(response):
+    vulnerabilities = []
+    server_header = response.headers.get('Server', '')
+
+    # Server header checks
+    vulnerabilities += check_server_header(server_header)
+
+    # Insecure HTTP methods check
+    vulnerabilities += check_insecure_http_methods(response.headers)
+
+    # Security headers check
+    vulnerabilities += check_security_headers(response.headers)
+
+    return vulnerabilities
+
+
+def check_server_header(server_header):
+    vulnerabilities = []
+    if "Apache/2.2" in server_header:
+        vulnerabilities.append("Potential vulnerability in Apache 2.2")
+    elif "nginx/1.16" in server_header:
+        vulnerabilities.append("Potential vulnerability in nginx 1.16")
+    return vulnerabilities
+
+
+def check_insecure_http_methods(headers):
+    vulnerabilities = []
+    if 'Allow' in headers:
+        if 'TRACE' in headers['Allow']:
+            vulnerabilities.append("HTTP TRACE method enabled")
+        if 'PUT' in headers['Allow']:
+            vulnerabilities.append("HTTP PUT method enabled")
+    return vulnerabilities
+
+
+def check_for_default_pages(url):
+    vulnerabilities = []
+    common_pages = ['index.html', 'index.php', '/phpinfo.php', '/server-status']
+    for page in common_pages:
+        resp = requests.get(f"{url}/{page}", timeout=10, verify=False)
+        if resp.status_code == 200:
+            if 'phpinfo()' in resp.text:
+                vulnerabilities.append(f"Exposed phpinfo() at {page}")
+            if 'Apache Status' in resp.text:
+                vulnerabilities.append(f"Apache server status exposed at {page}")
+    return vulnerabilities
 
 
 def check_ftp_vulnerability(ip_address):
