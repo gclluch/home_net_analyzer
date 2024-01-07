@@ -1,8 +1,8 @@
 # main.py
 
 from home_net_analyzer.scanner import scan_network
-from home_net_analyzer.utils import get_mac_details, infer_device_type
-from home_net_analyzer.port_scanner import scan_ports, analyze_ports, scan_ports_2, construct_banner
+from home_net_analyzer.device_utils import get_mac_details, infer_device_type
+from home_net_analyzer.port_scanner import scan_ports, analyze_ports
 from home_net_analyzer.os_detector import detect_os_active, detect_os_passive
 from home_net_analyzer.vulnerability import scan_vulnerabilities
 from home_net_analyzer.traffic_analyzer import start_traffic_analysis, device_traffic
@@ -37,15 +37,14 @@ def main():
             continue
         mac = device['mac']
         manufacturer = get_mac_details(mac)
-        scan_results = scan_ports_2(ip)
+        scan_results = scan_ports(ip)
 
         if isinstance(scan_results, dict) and "Error" in scan_results:
             print(f"Error scanning {ip}: {scan_results['Error']}")
             continue
 
         port_details = analyze_ports(ip, scan_results)
-        # banners = construct_banner(port_details, scan_results)
-
+        print(port_details)
         if "Error" in port_details:
             print(f"Error scanning {ip}: {port_details['Error']}")
             continue
@@ -54,10 +53,10 @@ def main():
         print('detect_os_active')
         if os_guess.startswith("Unknown OS"):
             os_guess = detect_os_passive(ip)
+
         device_type = infer_device_type(mac, port_details.keys())
-        # print('device_type')
+
         vulnerabilities = scan_vulnerabilities(ip, port_details.keys())
-        # print('scan_vulnerabilities')
 
         print("\n" + "="*50)
         print(f"Device Information for IP: {ip}")
