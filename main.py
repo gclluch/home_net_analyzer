@@ -38,7 +38,6 @@ def main():
         mac = device['mac']
         manufacturer = get_mac_details(mac)
         scan_results = scan_ports_2(ip)
-        open_ports = list(scan_results.keys())
 
         if isinstance(scan_results, dict) and "Error" in scan_results:
             print(f"Error scanning {ip}: {scan_results['Error']}")

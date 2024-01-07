@@ -7,9 +7,10 @@ import dns.resolver
 import dns.exception
 from smb.SMBConnection import SMBConnection
 import logging
-from .constants import KNOWN_ROUTER_OUIS
+from home_net_analyzer.constants import KNOWN_ROUTER_OUIS
 
 ##### Device Detail Utils #####
+
 
 def get_mac_details(mac_address):
     # Query an online API for MAC address details
@@ -18,6 +19,7 @@ def get_mac_details(mac_address):
     if response.status_code != 200:
         return 'Unknown Manufacturer'
     return response.content.decode()
+
 
 def infer_device_type(mac_address, open_ports):
     oui = mac_address.replace(":", "")[:6].upper()
@@ -69,14 +71,17 @@ def infer_device_type(mac_address, open_ports):
 def check_ssh_vulnerability(ip_address):
     nm = nmap.PortScanner()
     try:
-        nm.scan(ip_address, arguments='-p 22 --script ssh-hostkey,ssh2-enum-algos')
+        nm.scan(
+            ip_address,
+            arguments='-p 22 --script ssh-hostkey,ssh2-enum-algos')
         result = nm[ip_address]['tcp'][22]
         vulnerabilities = []
 
         # Check for weak algorithms
         if 'ssh2-enum-algos' in result['script']:
             if 'diffie-hellman-group1-sha1' in result['script']['ssh2-enum-algos']:
-                vulnerabilities.append("Weak encryption algorithm (diffie-hellman-group1-sha1)")
+                vulnerabilities.append(
+                    "Weak encryption algorithm (diffie-hellman-group1-sha1)")
 
         # Check for known vulnerable host keys
         if 'ssh-hostkey' in result['script']:
@@ -85,12 +90,14 @@ def check_ssh_vulnerability(ip_address):
                 if key_type in ['rsa', 'dsa', 'ecdsa']:
                     key_length = int(key_data.split()[0])
                     if key_type == 'rsa' and key_length < 2048:
-                        vulnerabilities.append(f"RSA key too short: {key_length} bits")
+                        vulnerabilities.append(
+                            f"RSA key too short: {key_length} bits")
                     elif key_type == 'dsa' and key_length != 1024:
                         vulnerabilities.append("DSA key length not 1024 bits")
                     # Add more logic for other key types and known issues
 
-        return vulnerabilities if vulnerabilities else ["No known SSH vulnerabilities detected"]
+        return vulnerabilities if vulnerabilities else [
+            "No known SSH vulnerabilities detected"]
     except Exception as e:
         return f"Error checking SSH vulnerability: {str(e)}"
 
@@ -118,20 +125,28 @@ def check_http_vulnerability(ip_address, port):
 
         # Check for security-related headers
         if 'X-Powered-By' in response.headers:
-            vulnerabilities.append(f"Server exposes software versions via X-Powered-By header: {response.headers['X-Powered-By']}")
+            vulnerabilities.append(
+                f"Server exposes software versions via X-Powered-By header: {response.headers['X-Powered-By']}")
         if 'Server' in response.headers:
-            vulnerabilities.append(f"Server exposes software versions via Server header: {response.headers['Server']}")
+            vulnerabilities.append(
+                f"Server exposes software versions via Server header: {response.headers['Server']}")
 
         # Check for default pages indicating unconfigured server
-        common_pages = ['index.html', 'index.php', '/phpinfo.php', '/server-status']
+        common_pages = [
+            'index.html',
+            'index.php',
+            '/phpinfo.php',
+            '/server-status']
         for page in common_pages:
             resp = requests.get(f"{url}/{page}", timeout=10, verify=False)
             if resp.status_code == 200 and 'phpinfo()' in resp.text:
                 vulnerabilities.append(f"Exposed phpinfo() at {page}")
             if resp.status_code == 200 and 'Apache Status' in resp.text:
-                vulnerabilities.append(f"Apache server status exposed at {page}")
+                vulnerabilities.append(
+                    f"Apache server status exposed at {page}")
 
-        return vulnerabilities if vulnerabilities else ["No known HTTP vulnerabilities detected"]
+        return vulnerabilities if vulnerabilities else [
+            "No known HTTP vulnerabilities detected"]
     except requests.ConnectionError:
         return ["Connection error (Is the server up?)"]
     except requests.Timeout:
@@ -152,9 +167,11 @@ def check_ftp_vulnerability(ip_address):
     except Exception as e:
         return [f"Error checking FTP vulnerability: {str(e)}"]
 
-    # Add more checks here (e.g., checking server banner for known vulnerable versions)
+    # Add more checks here (e.g., checking server banner for known vulnerable
+    # versions)
 
-    return vulnerabilities if vulnerabilities else ["No known FTP vulnerabilities detected"]
+    return vulnerabilities if vulnerabilities else [
+        "No known FTP vulnerabilities detected"]
 
 
 def check_smtp_vulnerability(ip_address):
@@ -176,7 +193,8 @@ def check_smtp_vulnerability(ip_address):
     except Exception as e:
         return [f"Error checking SMTP vulnerability: {str(e)}"]
 
-    return vulnerabilities if vulnerabilities else ["No known SMTP vulnerabilities detected"]
+    return vulnerabilities if vulnerabilities else [
+        "No known SMTP vulnerabilities detected"]
 
 
 def check_dns_vulnerability(ip_address):
@@ -188,14 +206,17 @@ def check_dns_vulnerability(ip_address):
         resolver.nameservers = [ip_address]
         answers = resolver.query(test_domain, 'ANY')
         if answers and len(answers) > 1:
-            vulnerabilities.append("DNS server is potentially vulnerable to amplification attacks.")
+            vulnerabilities.append(
+                "DNS server is potentially vulnerable to amplification attacks.")
     except dns.exception.DNSException as e:
         if "metaqueries are not allowed" in str(e):
-            vulnerabilities.append("DNS server properly configured to disallow metaqueries.")
+            vulnerabilities.append(
+                "DNS server properly configured to disallow metaqueries.")
         else:
             vulnerabilities.append(f"Error checking DNS vulnerability: {e}")
 
-    return vulnerabilities if vulnerabilities else ["No known DNS vulnerabilities detected"]
+    return vulnerabilities if vulnerabilities else [
+        "No known DNS vulnerabilities detected"]
 
 
 def check_file_sharing_vulnerability(ip_address, port):
@@ -205,7 +226,8 @@ def check_file_sharing_vulnerability(ip_address, port):
     try:
         conn_v1 = SMBConnection('', '', 'temp', ip_address, use_ntlm_v2=False)
         if conn_v1.connect(ip_address, port, timeout=10):
-            vulnerabilities.append(f"SMBv1 protocol is enabled on port {port}, which is outdated and insecure.")
+            vulnerabilities.append(
+                f"SMBv1 protocol is enabled on port {port}, which is outdated and insecure.")
     except Exception as e:
         return [f"Error checking SMBv1 vulnerability: {str(e)}"]
 
@@ -215,61 +237,202 @@ def check_file_sharing_vulnerability(ip_address, port):
         if conn.connect(ip_address, port, timeout=10):
             shares = conn.listShares(timeout=10)
             for share in shares:
-                if share.isSpecial and not share.name.endswith('$'):  # Non-administrative shares
-                    vulnerabilities.append(f"Potentially misconfigured share on port {port}: {share.name}")
+                if share.isSpecial and not share.name.endswith(
+                        '$'):  # Non-administrative shares
+                    vulnerabilities.append(
+                        f"Potentially misconfigured share on port {port}: {share.name}")
     except Exception as e:
         return [f"Error checking share vulnerability: {str(e)}"]
 
-    return vulnerabilities if vulnerabilities else ["No known SMB vulnerabilities detected"]
+    return vulnerabilities if vulnerabilities else [
+        "No known SMB vulnerabilities detected"]
+
+
+def get_relevant_urls(ip_address, port):
+    # Maps specific ports to their commonly associated URLs
+    service_urls = {
+        3000: [  # Common for Node.js, React, and other web development servers
+            f"http://{ip_address}:{port}/admin",
+            f"http://{ip_address}:{port}/api",
+            f"http://{ip_address}:{port}/dashboard",
+            # Add other Node.js/React specific URLs
+        ],
+        3306: [],  # MySQL - Generally, this port wouldn't serve web pages
+        5000: [  # Often used by Flask and other Python web frameworks
+            f"http://{ip_address}:{port}/admin",
+            f"http://{ip_address}:{port}/login",
+            f"http://{ip_address}:{port}/dashboard",
+            # Add other Flask specific URLs
+        ],
+        5432: [],  # PostgreSQL - Typically doesn't serve web pages
+        8000: [  # Common alternative HTTP port
+            f"http://{ip_address}:{port}/phpmyadmin",
+            f"http://{ip_address}:{port}/wordpress",
+            f"http://{ip_address}:{port}/webmin",
+            # ... other general web service URLs
+        ],
+        8001: [  # Alternative HTTP port, similar to 8000
+            f"http://{ip_address}:{port}/management",
+            f"http://{ip_address}:{port}/controlpanel",
+            # ... other alternative service URLs
+        ],
+        8008: [  # Another alternative HTTP port
+            f"http://{ip_address}:{port}/server-status",
+            f"http://{ip_address}:{port}/server-info",
+            # ... other server management URLs
+        ],
+        8010: [  # Used for HTTP services
+            f"http://{ip_address}:{port}/admin",
+            f"http://{ip_address}:{port}/status",
+            # ... other administrative URLs
+        ],
+        8080: [  # Frequently used for HTTP services, especially in Java applications
+            f"http://{ip_address}:{port}/tomcat/manager",
+            f"http://{ip_address}:{port}/jboss/management",
+            f"http://{ip_address}:{port}/weblogic/console",
+            # ... other Java web server URLs
+        ],
+        8081: [  # Common alternative to port 8080
+            f"http://{ip_address}:{port}/vnc",
+            f"http://{ip_address}:{port}/websocket",
+            # ... other web services or APIs
+        ],
+        8443: [  # Commonly used for HTTPS services (SSL/TLS)
+            f"https://{ip_address}:{port}/admin",
+            f"https://{ip_address}:{port}/secure",
+            # ... other secure web service URLs
+        ],
+        8888: [  # Jupyter Notebook default port
+            f"http://{ip_address}:{port}/tree",
+            f"http://{ip_address}:{port}/notebooks",
+            # ... other Jupyter specific URLs
+        ],
+        9000: [  # Used by some PHP-FPM installations and development tools
+            f"http://{ip_address}:{port}/phpinfo.php",
+            f"http://{ip_address}:{port}/phpmyadmin",
+            # ... other PHP specific URLs
+        ],
+        9200: [  # Default port for Elasticsearch
+            f"http://{ip_address}:{port}/_cat",
+            f"http://{ip_address}:{port}/_search",
+            # ... other Elasticsearch specific URLs
+        ],
+        9300: [],  # Elasticsearch nodes communication, typically not serving web pages
+        10000: [  # Webmin - web-based system administration interface
+            f"http://{ip_address}:{port}/session_login.cgi",
+            f"http://{ip_address}:{port}/config",
+            # ... other Webmin specific URLs
+        ],
+        27017: [],  # MongoDB NoSQL database, typically not serving web pages
+    }
+
+    # Default to root if no specific URLs
+    return service_urls.get(port, [f"http://{ip_address}:{port}"])
+
+
+def get_sql_injection_test_urls(ip_address, port):
+    # General URLs applicable to most web applications
+    general_urls = [
+        f"http://{ip_address}:{port}/login",
+        f"http://{ip_address}:{port}/admin",
+        f"http://{ip_address}:{port}/search",
+        f"http://{ip_address}:{port}/query",
+        f"http://{ip_address}:{port}/user",
+        f"http://{ip_address}:{port}/account",
+        # ... other general URLs ...
+    ]
+
+    # Port-specific URLs
+    port_specific_urls = {
+        3000: [  # Node.js, React development servers
+            f"http://{ip_address}:{port}/api",
+            f"http://{ip_address}:{port}/dev",
+            # ... Node.js/React specific URLs ...
+        ],
+        5000: [  # Flask development server
+            f"http://{ip_address}:{port}/flask-admin",
+            f"http://{ip_address}:{port}/flask-query",
+            # ... Flask specific URLs ...
+        ],
+        8000: [  # Alternative HTTP port, common for web apps
+            f"http://{ip_address}:{port}/config",
+            f"http://{ip_address}:{port}/settings",
+            # ... HTTP alternative specific URLs ...
+        ],
+        8080: [  # Frequently used for Java applications
+            f"http://{ip_address}:{port}/java-admin",
+            f"http://{ip_address}:{port}/servlet",
+            f"http://{ip_address}:{port}/jmx-console",
+            # ... Java specific URLs ...
+        ],
+        8443: [  # HTTPS services
+            f"https://{ip_address}:{port}/secure",
+            f"https://{ip_address}:{port}/ssladmin",
+            # ... HTTPS specific URLs ...
+        ],
+        8888: [  # Jupyter Notebook default port
+            f"http://{ip_address}:{port}/notebooks",
+            f"http://{ip_address}:{port}/tree",
+            # ... Jupyter specific URLs ...
+        ],
+        9000: [  # PHP-FPM, development tools
+            f"http://{ip_address}:{port}/phpinfo",
+            f"http://{ip_address}:{port}/php-status",
+            # ... PHP specific URLs ...
+        ],
+        # ... additional port mappings ...
+    }
+
+    # Combine general URLs with port-specific URLs if any
+    urls_to_test = general_urls + port_specific_urls.get(port, [])
+    return urls_to_test
+
+
+def check_webapp_presence(ip_address, port):
+    vulnerabilities = []
+    urls_to_test = get_relevant_urls(ip_address, port)
+    for url in urls_to_test:
+        try:
+            response = requests.get(url, timeout=5)
+            if response.status_code == 200:
+                vulnerabilities.append(f"Web application found at {url}")
+        except requests.RequestException:
+            # return [f"Error checking webapp vulnerability: {str(e)}"]
+            pass
+
+    return vulnerabilities
+
+
+def check_sql_injection(ip_address, port):
+    vulnerabilities = []
+    urls_to_test = get_sql_injection_test_urls(
+        ip_address, port)  # A subset or specific URLs for SQL tests
+
+    for url in urls_to_test:
+        try:
+            response = requests.get(
+                url + "'", timeout=10)  # Test for SQL Injection
+            known_error_indicators = [
+                "SQL syntax",
+                "database error",
+                "mysql_fetch_array",
+                "SQLSTATE",
+                "ODBC SQL Server Driver"]
+            if any(
+                    error_indicator in response.text for error_indicator in known_error_indicators):
+                vulnerabilities.append(
+                    f"Potential SQL Injection vulnerability found at {url}")
+        except requests.RequestException:
+            pass
+
+    return vulnerabilities
 
 
 def check_webapp_vulnerability(ip_address, port):
     vulnerabilities = []
-    urls_to_test = [
-        f"http://{ip_address}:{port}/phpmyadmin/",
-        f"http://{ip_address}:{port}/wordpress/",
-        f"http://{ip_address}:{port}/admin/",
-        f"http://{ip_address}:{port}/login/",
-        f"http://{ip_address}:{port}/wp-login.php",
-        f"http://{ip_address}:{port}/administrator/",
-        f"http://{ip_address}:{port}/user/login/",
-        f"http://{ip_address}:{port}/joomla/",
-        f"http://{ip_address}:{port}/mysqladmin/",
-        f"http://{ip_address}:{port}/db/",
-        f"http://{ip_address}:{port}/dbadmin/",
-        f"http://{ip_address}:{port}/myadmin/",
-        f"http://{ip_address}:{port}/mysql/",
-        f"http://{ip_address}:{port}/phpMyAdmin/",
-        f"http://{ip_address}:{port}/pma/",
-        f"http://{ip_address}:{port}/admin.php",
-        f"http://{ip_address}:{port}/config/",
-    ]
+    web_vulns = check_webapp_presence(ip_address, port)
+    sql_vulns = check_sql_injection(ip_address, port)
+    vulnerabilities = web_vulns + sql_vulns
 
-    for url in urls_to_test:
-        print(url)
-        try:
-            response = requests.get(url.format(ip_address, port), timeout=5)
-            if response.status_code == 200:
-                vulnerabilities.append(f"Web application found at {url.format(ip_address, port)}")
-        except requests.RequestException as e:
-            # return [f"Error checking webapp vulnerability: {str(e)}"]
-            pass
-
-        try:
-            response = requests.get(url + "'", timeout=10)  # Appending a single quote to test for SQL Injection
-
-            known_error_indicators = ["SQL syntax", "database error", "mysql_fetch_array", "SQLSTATE", "ODBC SQL Server Driver"]
-            if any(error_indicator in response.text for error_indicator in known_error_indicators):
-                vulnerabilities.append(f"Potential SQL Injection vulnerability found at {url}")
-        except requests.RequestException as e:
-            pass
-            # return [f"Error checking SQL injection vulnerability: {str(e)}"]
-
-    return vulnerabilities if vulnerabilities else ["No known web app vulnerabilities detected"]
-
-
-# TODO
-# def check_database_vulnerability(ip_address, port):
-#     vulnerabilities = []
-#     # Logic to check for database-specific vulnerabilities
-#     return vulnerabilities
+    return vulnerabilities if vulnerabilities else [
+        "No known web app vulnerabilities detected"]

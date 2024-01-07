@@ -73,7 +73,6 @@ def analyze_ports(ip_address, scan_results):
         else:
             banner = grab_banner(ip_address, port)
 
-        simple_banner = banner if banner else "No Banner"
         banners[port] = {
             "service": service,
             "banner": construct_banner(details, banner)
