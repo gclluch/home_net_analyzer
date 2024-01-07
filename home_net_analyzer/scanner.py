@@ -2,7 +2,7 @@
 from .port_scanner import scan_ports, analyze_ports
 from .os_detector import detect_os_active, detect_os_passive
 from .vulnerability import scan_vulnerabilities
-from .utils import get_mac_details, infer_device_type
+from .device_utils import get_mac_details, infer_device_type
 from scapy.all import ARP, Ether, srp
 
 def scan_network(ip_range):

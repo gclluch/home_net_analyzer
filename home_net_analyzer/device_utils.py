@@ -1,12 +1,5 @@
 # utils.py
 import requests
-import nmap
-import ftplib
-import smtplib
-import dns.resolver
-import dns.exception
-from smb.SMBConnection import SMBConnection
-import logging
 from home_net_analyzer.constants import KNOWN_ROUTER_OUIS
 
 ##### Device Detail Utils #####
