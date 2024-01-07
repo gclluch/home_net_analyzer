@@ -19,11 +19,15 @@ def scan_ports(ip_address):
         return {"Error": f"Failed to scan ports: {str(e)}"}
 
 
-def scan_ports(ip_address):
+def scan_ports_2(ip_address):
     nm = nmap.PortScanner()
     try:
         # Include the -sV option for service version detection
-        nm.scan(ip_address, '1-10000', arguments='-sV')
+        nm.scan(
+            ip_address,
+            '1-1024',
+            arguments='-sV'
+            )
 
         port_info = {}
         for port in nm[ip_address]['tcp']:
@@ -33,17 +37,22 @@ def scan_ports(ip_address):
             product = service_info['product']
             extra_info = service_info['extrainfo']
 
-            banner = f"{service}, {product} {version} {extra_info}".strip()
-            port_info[port] = {"service": service, "banner": banner}
+            banner = f"{service}, {product} {version}, {extra_info}".strip()
+            port_info[port] = {
+                "service": service,
+                "product": product,
+                "version": version,
+                "extra_info": extra_info
+                }
 
         return port_info
     except Exception as e:
         return {"Error": f"Failed to scan ports: {str(e)}"}
 
 
-def analyze_ports(ip_address, open_ports):
+def analyze_ports(ip_address, scan_results):
     banners = {}
-    for port in open_ports:
+    for port, details in scan_results.items():
         service = EXTENDED_COMMON_SERVICES.get(port, "Unknown")
 
         # Use specialized banner grabbing for HTTP/HTTPS
@@ -63,12 +72,19 @@ def analyze_ports(ip_address, open_ports):
             banner = grab_printer_banner(ip_address, port)
         else:
             banner = grab_banner(ip_address, port)
-        banners[port] = {"service": service, "banner": banner if banner else "No Banner"}
+
+        simple_banner = banner if banner else "No Banner"
+        banners[port] = {
+            "service": service,
+            "banner": construct_banner(details, banner)
+            }
+
     return banners
+
 
 def grab_banner(ip_address, port):
     try:
-        socket.setdefaulttimeout(2)
+        socket.setdefaulttimeout(3)
         s = socket.socket()
         s.connect((ip_address, port))
         banner = s.recv(2048).decode().strip()
@@ -76,3 +92,20 @@ def grab_banner(ip_address, port):
         return banner
     except:
         return None
+
+
+def construct_banner(details, simple_banner):
+    product = details.get('product', '')
+    version = details.get('version', '')
+    extra_info = details.get('extra_info', '').strip()
+
+    # Constructing the detailed banner
+    detailed_banner_parts = [product, f"(Version: {version})" if version else "", extra_info]
+    detailed_banner = " ".join(part for part in detailed_banner_parts if part)
+
+    # Including simple banner if it's informative and detailed banner is not empty
+    if detailed_banner:
+        return f"{detailed_banner} - Response: {simple_banner}" if simple_banner else detailed_banner
+
+    # Fallback to simple banner or 'No Banner'
+    return simple_banner if simple_banner else 'No Banner'

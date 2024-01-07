@@ -3,8 +3,10 @@ import nmap
 
 def detect_os_active(ip_address):
     nm = nmap.PortScanner()
+    # print(1)
     try:
         nm.scan(ip_address, arguments="-A")  # Using -O for OS detection
+        # print(1)
         if 'osclass' in nm[ip_address]:
             for osclass in nm[ip_address]['osclass']:
                 return osclass.get('osfamily', 'Unknown') + " " + osclass.get('osgen', '')

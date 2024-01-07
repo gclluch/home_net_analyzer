@@ -36,3 +36,23 @@ KNOWN_ROUTER_OUIS = {
     "F0:9F:C2": "Ubiquiti Networks",
     # ... add more as needed ...
 }
+
+WEBAPP_PORTS = [
+    3000,  # Often used by Node.js and React development servers
+    3306,  # Default MySQL database port
+    5000,  # Commonly used by Flask development server
+    5432,  # Default PostgreSQL database port
+    8000,  # Often used as an alternative for HTTP services
+    8001,  # Alternative HTTP services or secondary interfaces
+    8008,  # Similar to port 8001, alternative HTTP services
+    8010,  # Another port for alternative HTTP services
+    8080,  # Frequently used for HTTP services, especially in development environments
+    8081,  # Common alternative to port 8080
+    8443,  # Commonly used for HTTPS services (alternative to port 443)
+    8888,  # Jupyter Notebook default port
+    9000,  # Used by some PHP-FPM installations and development tools
+    9200,  # Default port for Elasticsearch
+    9300,  # Elasticsearch nodes communication
+    10000, # Webmin - web-based system administration interface
+    27017, # Default MongoDB NoSQL database port
+]

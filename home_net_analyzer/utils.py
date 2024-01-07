@@ -246,6 +246,7 @@ def check_webapp_vulnerability(ip_address, port):
     ]
 
     for url in urls_to_test:
+        print(url)
         try:
             response = requests.get(url.format(ip_address, port), timeout=5)
             if response.status_code == 200:
@@ -255,7 +256,7 @@ def check_webapp_vulnerability(ip_address, port):
             pass
 
         try:
-            response = requests.get(url + "'")  # Appending a single quote to test for SQL Injection
+            response = requests.get(url + "'", timeout=10)  # Appending a single quote to test for SQL Injection
 
             known_error_indicators = ["SQL syntax", "database error", "mysql_fetch_array", "SQLSTATE", "ODBC SQL Server Driver"]
             if any(error_indicator in response.text for error_indicator in known_error_indicators):
