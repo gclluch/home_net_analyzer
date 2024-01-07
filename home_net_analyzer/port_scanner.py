@@ -5,8 +5,23 @@ from home_net_analyzer.constants import EXTENDED_COMMON_SERVICES
 from home_net_analyzer.banner_utils import *
 
 
+def scan_ports_2(ip_address):
+    nm = nmap.PortScanner()
+    try:
+
+        nm.scan(
+            ip_address,
+            '1-1024',  # 1-1024, 1-65535
+            # arguments='-sV'  # -sV for service version detection
+        )
+        return [port for port in nm[ip_address].get('tcp', [])]
+    except Exception as e:
+        return {"Error": f"Failed to scan ports: {str(e)}"}
+
+
 def scan_ports(ip_address):
     nm = nmap.PortScanner()
+    port_info = {}
     try:
         # Include the -sV option for service version detection
         nm.scan(
@@ -15,58 +30,71 @@ def scan_ports(ip_address):
             arguments='-sV'
             )
 
-        port_info = {}
-        for port in nm[ip_address]['tcp']:
-            service_info = nm[ip_address]['tcp'][port]
-            service = service_info['name']
-            version = service_info['version']
-            product = service_info['product']
-            extra_info = service_info['extrainfo']
+        if 'tcp' in nm[ip_address]:
+            for port in nm[ip_address]['tcp']:
+                service_info = nm[ip_address]['tcp'][port]
+                service = service_info['name']
+                version = service_info['version']
+                product = service_info['product']
+                extra_info = service_info['extrainfo']
 
-            port_info[port] = {
-                "service": service,
-                "product": product,
-                "version": version,
-                "extra_info": extra_info
-                }
+                port_info[port] = {
+                    "service": service,
+                    "product": product,
+                    "version": version,
+                    "extra_info": extra_info
+                    }
 
-        return port_info
+            return port_info
+        else:
+            print("No TCP ports found.")
+            return {}
+
     except Exception as e:
-        return {"Error": f"Failed to scan ports: {str(e)}"}
+        print(f"Error scanning {ip_address}: {str(e)}")
+        return {}
 
 
 def analyze_ports(ip_address, scan_results):
     banners = {}
     for port, details in scan_results.items():
+        print('DETAILS: ', details)
+
         service = EXTENDED_COMMON_SERVICES.get(port, "Unknown")
 
         # Use specialized banner grabbing for HTTP/HTTPS
         if service == "HTTP":  # also works for UPnP
-            banner = grab_banner_http(ip_address, port)
+            banner_info = grab_banner_http(ip_address, port)
         elif service == "HTTPS":
-            banner = grab_banner_https(ip_address, port)
+            banner_info = grab_banner_https(ip_address, port)
         elif service == "FTP":
-            banner = grab_banner_ftp(ip_address, port)
+            banner_info = grab_banner_ftp(ip_address, port)
         elif service == "SSH":
-            banner = grab_banner_ssh(ip_address, port)
+            banner_info = grab_banner_ssh(ip_address, port)
         elif service == "SMTP":
-            banner = grab_banner_smtp(ip_address, port)
+            banner_info = grab_banner_smtp(ip_address, port)
         elif service == "MQTT":
-            banner = probe_mqtt_broker(ip_address, port)
+            banner_info = probe_mqtt_broker(ip_address, port)
         elif service == "IPP":  # Internet Printing Protocol for printers
-            banner = grab_printer_banner(ip_address, port)
+            banner_info = grab_printer_banner(ip_address, port)
         else:
-            banner = grab_banner(ip_address, port)
+            banner = grab_banner_generic(ip_address, port)
+            banner_info = {'response': banner}  # Wrap simple banner in a dictionary
+
+        # banners[port] = {
+        #     "service": service,
+        #     "banner": construct_banner(details, banner)
+        #     }
 
         banners[port] = {
             "service": service,
-            "banner": construct_banner(details, banner)
-            }
+            "banner": construct_banner(details, banner_info)
+        }
 
     return banners
 
 
-def grab_banner(ip_address, port):
+def grab_banner_generic(ip_address, port):
     try:
         socket.setdefaulttimeout(3)
         s = socket.socket()
@@ -74,22 +102,48 @@ def grab_banner(ip_address, port):
         banner = s.recv(2048).decode().strip()
         s.close()
         return banner
-    except:
-        return None
+    except Exception as e:
+        return f"Failed to retrieve banner: {str(e)}"
 
 
-def construct_banner(details, simple_banner):
+
+def construct_banner(details, banner_info):
+    if 'error' in banner_info:
+        return banner_info['error']  # Directly return the error message
+
     product = details.get('product', '')
     version = details.get('version', '')
     extra_info = details.get('extra_info', '').strip()
+    response = banner_info.get('response', '')
 
-    # Constructing the detailed banner
     detailed_banner_parts = [product, f"(Version: {version})" if version else "", extra_info]
     detailed_banner = " ".join(part for part in detailed_banner_parts if part)
 
-    # Including simple banner if it's informative and detailed banner is not empty
-    if detailed_banner:
-        return f"{detailed_banner} - Response: {simple_banner}" if simple_banner else detailed_banner
+    # Construct a comprehensive banner string
+    banner_str = f"{detailed_banner}"
+    if response:
+        banner_str += f" - Response: {response}"
 
-    # Fallback to simple banner or 'No Banner'
-    return simple_banner if simple_banner else 'No Banner'
+    # Include additional information from banner_info if available
+    for key, value in banner_info.items():
+        if key != 'response':
+            banner_str += f" | {key}: {value}"
+
+    return banner_str if banner_str.strip() else 'No Banner'
+
+
+# def construct_banner(details, simple_banner):
+#     product = details.get('product', '')
+#     version = details.get('version', '')
+#     extra_info = details.get('extra_info', '').strip()
+
+#     # Constructing the detailed banner
+#     detailed_banner_parts = [product, f"(Version: {version})" if version else "", extra_info]
+#     detailed_banner = " ".join(part for part in detailed_banner_parts if part)
+
+#     # Including simple banner if it's informative and detailed banner is not empty
+#     if detailed_banner:
+#         return f"{detailed_banner} - Response: {simple_banner}" if simple_banner else detailed_banner
+
+#     # Fallback to simple banner or 'No Banner'
+#     return simple_banner if simple_banner else 'No Banner'
