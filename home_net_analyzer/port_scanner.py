@@ -3,7 +3,7 @@ import socket
 import nmap
 from home_net_analyzer.constants import EXTENDED_COMMON_SERVICES
 from home_net_analyzer.banner_utils import *
-
+import logging
 
 def scan_ports(ip_address):
     nm = nmap.PortScanner()
@@ -12,7 +12,7 @@ def scan_ports(ip_address):
         # Include the -sV option for service version detection
         nm.scan(
             ip_address,
-            '1-1024',
+            '1-100',
             arguments='-sV'
             )
 
@@ -49,7 +49,9 @@ def analyze_ports(ip_address, scan_results):
         service = EXTENDED_COMMON_SERVICES.get(port, "Unknown")
 
         # Use specialized banner grabbing for HTTP/HTTPS
-        if service == "HTTP":  # also works for UPnP
+        if service == "DNS":
+            banner_info = grab_banner_dns(ip_address, port)
+        elif service == "HTTP":  # also works for UPnP
             banner_info = grab_banner_http(ip_address, port)
         elif service == "HTTPS":
             banner_info = grab_banner_https(ip_address, port)
@@ -61,16 +63,15 @@ def analyze_ports(ip_address, scan_results):
             banner_info = grab_banner_smtp(ip_address, port)
         elif service == "MQTT":
             banner_info = probe_mqtt_broker(ip_address, port)
+        elif service == "POP3":
+            banner_info = grab_banner_pop3(ip_address, port)
+        elif service == "IMAP":
+            banner_info = grab_banner_imap(ip_address, port)
         elif service == "IPP":  # Internet Printing Protocol for printers
             banner_info = grab_printer_banner(ip_address, port)
         else:
             banner = grab_banner_generic(ip_address, port)
             banner_info = {'response': banner}  # Wrap simple banner in a dictionary
-
-        # banners[port] = {
-        #     "service": service,
-        #     "banner": construct_banner(details, banner)
-        #     }
 
         banners[port] = {
             "service": service,
@@ -89,8 +90,9 @@ def grab_banner_generic(ip_address, port):
         s.close()
         return banner
     except Exception as e:
-        return f"Failed to retrieve banner: {str(e)}"
-
+        logging.error(f"Failed to retrieve banner: {str(e)}")
+        # return f"Failed to retrieve banner: {str(e)}"
+        return None
 
 
 def construct_banner(details, banner_info):

@@ -1,11 +1,13 @@
-import http.client
-import dns.resolver
 import socket
 import ssl
-from datetime import datetime
+import http.client
+import dns.resolver
+import dns.query
+
 import ftplib
 import smtplib
-import paramiko
+import poplib
+import imaplib
 import paho.mqtt.client as mqtt
 
 
@@ -76,7 +78,6 @@ def analyze_content(content):
     return ', '.join([f"{key}: {value}" for key, value in fingerprint.items()]) if fingerprint else "No specific fingerprint detected"
 
 
-
 def grab_banner_https(ip_address, port):
     try:
         context = ssl.create_default_context()
@@ -118,6 +119,18 @@ def get_ssl_certificate_info(connection):
         'valid_to': valid_to,
         'subject': subject
     }
+
+
+def grab_banner_dns(ip_address, port):
+    try:
+        query = dns.message.make_query('version.bind', dns.rdatatype.TXT, dns.rdataclass.CH)
+        response = dns.query.udp(query, ip_address, port=port, timeout=10)
+        if response.answer:
+            return {'response': str(response.answer[0])}
+        else:
+            return {'response': "No version information available"}
+    except Exception as e:
+        return {'error': f"Failed to probe DNS service: {str(e)}"}
 
 
 def grab_banner_ftp(ip_address, port):
@@ -193,6 +206,27 @@ def probe_mqtt_broker(ip_address, port):
         return {'error': f"Failed to probe MQTT broker: {str(e)}"}
 
 
+def grab_banner_pop3(ip_address, port):
+    try:
+        server = poplib.POP3(ip_address, port, timeout=10)
+        banner = server.getwelcome()
+        server.quit()
+        return {'response': banner}
+    except Exception as e:
+        return {'error': f"Failed to retrieve POP3 banner: {str(e)}"}
+
+
+def grab_banner_imap(ip_address, port):
+    try:
+        server = imaplib.IMAP4(ip_address, port)
+        banner = server.welcome
+        server.logout()
+        return {'response': banner}
+    except Exception as e:
+        return {'error': f"Failed to retrieve IMAP banner: {str(e)}"}
+
+
 def grab_printer_banner(ip_address, port):
     # Assuming grab_banner_http returns a dictionary
     return grab_banner_http(ip_address, port)
+

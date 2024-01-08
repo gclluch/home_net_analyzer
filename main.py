@@ -2,7 +2,7 @@
 
 from home_net_analyzer.scanner import scan_network
 from home_net_analyzer.device_utils import get_mac_details, infer_device_type
-from home_net_analyzer.port_scanner import scan_ports, analyze_ports, scan_ports_2
+from home_net_analyzer.port_scanner import scan_ports, analyze_ports
 from home_net_analyzer.os_detector import detect_os_active, detect_os_passive
 from home_net_analyzer.vulnerability import scan_vulnerabilities
 from home_net_analyzer.traffic_analyzer import start_traffic_analysis, device_traffic
