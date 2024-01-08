@@ -12,7 +12,7 @@ def scan_ports(ip_address):
         # Include the -sV option for service version detection
         nm.scan(
             ip_address,
-            '1-100',
+            '1-15000',
             arguments='-sV'
             )
 

@@ -1,15 +1,38 @@
+"""
+Banner Grabbing Utilities Module
+
+This module contains functions for grabbing banners from various services over HTTP.
+It is designed to be used as part of a larger network scanning tool to gather information
+about the services running on a network. It includes functionality for fetching banners
+from standard HTTP and HTTPS services, as well as for more specific services like FTP, SSH,
+SMTP, MQTT, IPP, and others. The module also handles application fingerprinting by analyzing
+the content of HTTP responses.
+
+Functions:
+    grab_banner_http(ip_address, port): Retrieve HTTP banner information.
+    grab_banner_https(ip_address, port): Retrieve HTTPS banner information.
+    grab_banner_ftp(ip_address, port): Retrieve FTP banner information.
+    grab_banner_ssh(ip_address, port): Retrieve SSH banner information.
+    grab_banner_smtp(ip_address, port): Retrieve SMTP banner information.
+    probe_mqtt_broker(ip_address, port): Probe MQTT broker responsiveness.
+    grab_printer_banner(ip_address, port): Retrieve banner information for IPP.
+    (Other functions as defined in the module)
+
+This module is part of a network scanning tool aimed at security analysis and network management.
+
+Dependencies: requests, http.client, ssl, ftplib, smtplib, paramiko, paho.mqtt,
+(other dependencies as applicable)
+"""
 import socket
 import ssl
 import http.client
-import dns.resolver
-import dns.query
-
 import ftplib
 import smtplib
 import poplib
 import imaplib
+import dns.resolver
+import dns.query
 import paho.mqtt.client as mqtt
-
 
 # Only disable on secure, internal networks
 import urllib3
@@ -17,6 +40,16 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 def grab_banner_http(ip_address, port):
+    """
+    Retrieve HTTP banner information from the specified IP address and port.
+
+    Args:
+        ip_address (str): The IP address to connect to.
+        port (int): The port number to connect to.
+
+    Returns:
+        dict: A dictionary containing banner information or an error message.
+    """
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Banner Grabber)'}
         conn = http.client.HTTPConnection(ip_address, port, timeout=10)
@@ -30,11 +63,11 @@ def grab_banner_http(ip_address, port):
             # Additional headers can be added here
         }
 
-        # Handling redirects
+        # Handling redirects if necessary
         if response.status in [301, 302]:
             banner_info['location'] = response.getheader('Location')
 
-        # Fetch and analyze content for fingerprinting (if necessary)
+        # Fetch and analyze content for fingerprinting
         content = response.read().decode('utf-8', errors='ignore')
         banner_info['application_fingerprint'] = analyze_content(content)
 
@@ -44,6 +77,23 @@ def grab_banner_http(ip_address, port):
 
 
 def analyze_content(content):
+    """
+    Analyzes the given content of a web page to identify the underlying technologies.
+
+    This function searches the content for specific patterns or keywords that indicate
+    the use of particular content management systems (CMS), web frameworks, server-side
+    languages, or other notable technologies. It compiles these findings into a
+    fingerprint dictionary.
+
+    Args:
+        content (str): The HTML content of a web page to analyze.
+
+    Returns:
+        str: A string representation of the application's fingerprint.
+        It lists detected technologies and their characteristics.
+        Returns a message indicating no specific technologies were detected
+        if none are found in the content.
+    """
     fingerprint = {}
 
     # CMS Detection
@@ -75,10 +125,23 @@ def analyze_content(content):
         fingerprint['express_app'] = 'Express.js'
 
     # Convert the fingerprint dictionary to a string for easy display
-    return ', '.join([f"{key}: {value}" for key, value in fingerprint.items()]) if fingerprint else "No specific fingerprint detected"
+    return ', '.join([f"{key}: {value}" for key, value in fingerprint.items(
+    )]) if fingerprint else "No specific fingerprint detected"
 
 
 def grab_banner_https(ip_address, port):
+    """
+    Retrieves HTTPS banner information from the specified IP address and port.
+
+    Args:
+        ip_address (str): The IP address of the server to connect to.
+        port (int): The port number to use for the HTTPS connection.
+
+    Returns:
+        dict: A dictionary containing the HTTPS banner information, server details,
+              and SSL certificate information. Returns an error message if the
+              retrieval fails.
+    """
     try:
         context = ssl.create_default_context()
         context.check_hostname = False
@@ -95,23 +158,33 @@ def grab_banner_https(ip_address, port):
         }
 
         conn.close()
-
         return banner_info
     except Exception as e:
         return {"error": f"Failed to retrieve HTTPS banner: {str(e)}"}
 
 
 def get_ssl_certificate_info(connection):
+    """
+    Extracts and returns SSL certificate information from the given connection.
+
+    Args:
+        connection (ssl.SSLSocket): The SSL socket connection to extract certificate info from.
+
+    Returns:
+        dict: A dictionary containing details about the SSL certificate,
+              including issuer, validity period, and subject.
+    """
     certificate = connection.getpeercert()
     if not certificate:
         return "No certificate information available"
 
-    issuer = certificate.get('issuer')
+    def format_name(name):
+        return ', '.join(f"{name_part[0]}={name_part[1]}" for name_part in name)
+
+    issuer = format_name(certificate.get('issuer'))
     valid_from = certificate.get('notBefore')
     valid_to = certificate.get('notAfter')
-    subject = certificate.get('subject')
-
-    # Additional formatting and processing can be done here
+    subject = format_name(certificate.get('subject'))
 
     return {
         'issuer': issuer,
@@ -122,8 +195,20 @@ def get_ssl_certificate_info(connection):
 
 
 def grab_banner_dns(ip_address, port):
+    """
+    Retrieves DNS banner information from the specified IP address and port.
+
+    Args:
+        ip_address (str): The IP address of the DNS server.
+        port (int): The port number of the DNS service.
+
+    Returns:
+        dict: A dictionary containing the response with DNS version information,
+              or an error message if the retrieval fails.
+    """
     try:
-        query = dns.message.make_query('version.bind', dns.rdatatype.TXT, dns.rdataclass.CH)
+        query = dns.message.make_query(
+            'version.bind', dns.rdatatype.TXT, dns.rdataclass.CH)
         response = dns.query.udp(query, ip_address, port=port, timeout=10)
         if response.answer:
             return {'response': str(response.answer[0])}
@@ -134,6 +219,18 @@ def grab_banner_dns(ip_address, port):
 
 
 def grab_banner_ftp(ip_address, port):
+    """
+    Retrieves FTP banner and additional server information.
+
+    Args:
+        ip_address (str): The IP address of the FTP server.
+        port (int): The port number of the FTP service.
+
+    Returns:
+        dict: A dictionary containing FTP server information, including welcome
+              banner, feature list, and help information, or an error message if
+              the retrieval fails.
+    """
     try:
         with ftplib.FTP(timeout=10) as ftp:
             ftp.connect(ip_address, port)
@@ -153,6 +250,17 @@ def grab_banner_ftp(ip_address, port):
 
 
 def grab_banner_ssh(ip_address, port):
+    """
+    Retrieves the SSH banner from the specified IP address and port.
+
+    Args:
+        ip_address (str): The IP address of the SSH server.
+        port (int): The port number of the SSH service.
+
+    Returns:
+        dict: A dictionary containing the SSH banner response, or an error message
+              if the retrieval fails.
+    """
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(10)
@@ -161,7 +269,7 @@ def grab_banner_ssh(ip_address, port):
         # Receive the banner
         banner = s.recv(1024).decode('utf-8').strip()
         s.close()
-        return {'response': banner}  # Return a dictionary for consistency
+        return {'response': banner}
     except socket.error as e:
         return {'error': f"Socket error: {str(e)}"}
     except Exception as e:
@@ -169,6 +277,17 @@ def grab_banner_ssh(ip_address, port):
 
 
 def grab_banner_smtp(ip_address, port):
+    """
+    Retrieves the SMTP banner from the specified IP address and port.
+
+    Args:
+        ip_address (str): The IP address of the SMTP server.
+        port (int): The port number of the SMTP service.
+
+    Returns:
+        dict: A dictionary containing the SMTP response code and message, or an
+              error message if the retrieval fails.
+    """
     try:
         with smtplib.SMTP(ip_address, port, timeout=10) as smtp:
             # The connect method implicitly fetches the banner
@@ -184,19 +303,18 @@ def grab_banner_smtp(ip_address, port):
         return {'error': f"Failed to retrieve SMTP banner: {str(e)}"}
 
 
-def probe_dns_server(ip_address, port):
-    try:
-        resolver = dns.resolver.Resolver()
-        resolver.nameservers = [ip_address]
-        resolver.port = port
-        answers = resolver.query('example.com', 'A')
-        if answers:
-            return {'response': "DNS service is responsive."}
-    except Exception as e:
-        return {'error': f"Failed to probe DNS service: {str(e)}"}
-
-
 def probe_mqtt_broker(ip_address, port):
+    """
+    Probes an MQTT broker to check its responsiveness.
+
+    Args:
+        ip_address (str): The IP address of the MQTT broker.
+        port (int): The port number on which the MQTT broker is running.
+
+    Returns:
+        dict: A dictionary containing a response message if the MQTT broker is
+              responsive, or an error message if the probe fails.
+    """
     try:
         client = mqtt.Client()
         client.connect(ip_address, port, 60)
@@ -207,6 +325,17 @@ def probe_mqtt_broker(ip_address, port):
 
 
 def grab_banner_pop3(ip_address, port):
+    """
+    Retrieves the POP3 banner from the specified IP address and port.
+
+    Args:
+        ip_address (str): The IP address of the POP3 server.
+        port (int): The port number of the POP3 service.
+
+    Returns:
+        dict: A dictionary containing the POP3 banner, or an error message
+              if the retrieval fails.
+    """
     try:
         server = poplib.POP3(ip_address, port, timeout=10)
         banner = server.getwelcome()
@@ -217,6 +346,17 @@ def grab_banner_pop3(ip_address, port):
 
 
 def grab_banner_imap(ip_address, port):
+    """
+    Retrieves the IMAP banner from the specified IP address and port.
+
+    Args:
+        ip_address (str): The IP address of the IMAP server.
+        port (int): The port number of the IMAP service.
+
+    Returns:
+        dict: A dictionary containing the IMAP banner, or an error message
+              if the retrieval fails.
+    """
     try:
         server = imaplib.IMAP4(ip_address, port)
         banner = server.welcome
@@ -229,4 +369,3 @@ def grab_banner_imap(ip_address, port):
 def grab_printer_banner(ip_address, port):
     # Assuming grab_banner_http returns a dictionary
     return grab_banner_http(ip_address, port)
-

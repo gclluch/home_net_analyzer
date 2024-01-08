@@ -1,4 +1,19 @@
-# utils.py
+"""
+Device Utilities Module
+
+This module contains utility functions for device analysis in a network environment.
+It includes methods for retrieving manufacturer details based on MAC addresses and
+inferring device types based on open ports and other network characteristics.
+
+Functions:
+    get_mac_details(mac_address): Retrieves the manufacturer details based on the MAC address.
+    infer_device_type(mac_address, open_ports): Infers the device type based on MAC address and open ports.
+
+The module utilizes external services for MAC address lookup and implements heuristic
+methods for device type inference.
+
+"""
+
 import requests
 from home_net_analyzer.constants import KNOWN_ROUTER_OUIS
 
@@ -6,7 +21,17 @@ from home_net_analyzer.constants import KNOWN_ROUTER_OUIS
 
 
 def get_mac_details(mac_address):
-    # Query an online API for MAC address details
+    """
+    Retrieves the manufacturer details for a given MAC address via external API
+
+    Args:
+        mac_address (str): The MAC address to query.
+
+    Returns:
+        str: The manufacturer name associated with the MAC address. Returns
+             'Unknown Manufacturer' if the API call is unsuccessful or if the
+             MAC address is not recognized.
+    """
     url = f'https://api.macvendors.com/{mac_address}'
     response = requests.get(url)
     if response.status_code != 200:
@@ -15,6 +40,20 @@ def get_mac_details(mac_address):
 
 
 def infer_device_type(mac_address, open_ports):
+    """
+    Infers the type of device based on its MAC address and open ports.
+
+    This function uses the MAC address's OUI (Organizationally Unique Identifier)
+    and the set of open ports to determine the most likely type of device.
+
+    Args:
+        mac_address (str): The MAC address of the device.
+        open_ports (list): A set of integers representing the open ports on the device.
+
+    Returns:
+        str: The inferred device type based on the MAC address and open ports.
+             Returns 'Unknown Device' if the device type cannot be determined.
+    """
     oui = mac_address.replace(":", "")[:6].upper()
     if oui in KNOWN_ROUTER_OUIS:
         return f"Router ({KNOWN_ROUTER_OUIS[oui]})"
