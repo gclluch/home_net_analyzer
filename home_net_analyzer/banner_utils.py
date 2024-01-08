@@ -34,12 +34,47 @@ def grab_banner_http(ip_address, port):
 
         # Fetch and analyze content for fingerprinting (if necessary)
         content = response.read().decode('utf-8', errors='ignore')
-        banner_info['content'] = content
-        # banner_info['application_fingerprint'] = analyze_content(content)
+        banner_info['application_fingerprint'] = analyze_content(content)
 
         return banner_info
     except Exception as e:
         return {'error': f"Failed to retrieve banner: {str(e)}"}
+
+
+def analyze_content(content):
+    fingerprint = {}
+
+    # CMS Detection
+    if 'wp-content' in content:
+        fingerprint['cms'] = 'WordPress'
+    elif '/media/system/js/' in content:
+        fingerprint['cms'] = 'Joomla'
+    elif 'Drupal' in content:
+        fingerprint['cms'] = 'Drupal'
+
+    # Frameworks and Libraries
+    if 'angular.min.js' in content:
+        fingerprint['framework'] = 'AngularJS'
+    elif 'react' in content:
+        fingerprint['framework'] = 'React'
+    elif 'vue.min.js' in content:
+        fingerprint['framework'] = 'Vue.js'
+
+    # Server-Side Languages
+    if '<?php' in content:
+        fingerprint['server_lang'] = 'PHP'
+    elif 'asp.net' in content.lower():
+        fingerprint['server_lang'] = 'ASP.NET'
+
+    # Specific File Paths or Unique Identifiers
+    if '/.env' in content:
+        fingerprint['sensitive_file'] = 'Exposed .env File'
+    if 'X-Powered-By: Express' in content:
+        fingerprint['express_app'] = 'Express.js'
+
+    # Convert the fingerprint dictionary to a string for easy display
+    return ', '.join([f"{key}: {value}" for key, value in fingerprint.items()]) if fingerprint else "No specific fingerprint detected"
+
 
 
 def grab_banner_https(ip_address, port):
@@ -65,23 +100,24 @@ def grab_banner_https(ip_address, port):
         return {"error": f"Failed to retrieve HTTPS banner: {str(e)}"}
 
 
-def get_ssl_certificate_info(sock):
-    cert_info = ssl.DER_cert_to_PEM_cert(sock.getpeercert(binary_form=True))
-    certificate = ssl.PEM_cert_to_DER_cert(cert_info)
+def get_ssl_certificate_info(connection):
+    certificate = connection.getpeercert()
+    if not certificate:
+        return "No certificate information available"
 
-    # Extracting details from the certificate
-    details = {
-        'issuer': certificate.get_issuer(),
-        'valid_from': certificate.get_notBefore(),
-        'valid_to': certificate.get_notAfter(),
-        'subject': certificate.get_subject(),
+    issuer = certificate.get('issuer')
+    valid_from = certificate.get('notBefore')
+    valid_to = certificate.get('notAfter')
+    subject = certificate.get('subject')
+
+    # Additional formatting and processing can be done here
+
+    return {
+        'issuer': issuer,
+        'valid_from': valid_from,
+        'valid_to': valid_to,
+        'subject': subject
     }
-
-    # Formatting dates
-    details['valid_from'] = datetime.strptime(details['valid_from'].decode('ascii'), '%Y%m%d%H%M%SZ')
-    details['valid_to'] = datetime.strptime(details['valid_to'].decode('ascii'), '%Y%m%d%H%M%SZ')
-
-    return details
 
 
 def grab_banner_ftp(ip_address, port):
